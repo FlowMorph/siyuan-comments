@@ -10,7 +10,7 @@ function closestBlock(node: Node | null): HTMLElement | null {
 }
 
 /** 在编辑器里找块元素，跳过嵌入块里渲染的副本 */
-function findBlockElement(root: Element, blockId: string): HTMLElement | null {
+export function findBlockElement(root: Element, blockId: string): HTMLElement | null {
     return Array.from(root.querySelectorAll<HTMLElement>(`[data-node-id="${blockId}"]`))
         .find(item => !item.parentElement?.closest('[data-type="NodeBlockQueryEmbed"]')) ?? null;
 }
@@ -131,4 +131,14 @@ export function scrollToAnchor(blockId: string, threadId: string): boolean {
         }
     }
     return false;
+}
+
+/** 找讨论串的锚点 span：优先在给定编辑器内找，其次在任一可见编辑器中找 */
+export function findAnchorSpan(threadId: string, root?: Element | null): HTMLElement | null {
+    const selector = `.protyle-wysiwyg span[${ATTR_ANCHOR}="${threadId}"]`;
+    const inRoot = root?.querySelector<HTMLElement>(`span[${ATTR_ANCHOR}="${threadId}"]`);
+    if (inRoot) {
+        return inRoot;
+    }
+    return Array.from(document.querySelectorAll<HTMLElement>(selector)).find(item => item.offsetParent) ?? null;
 }

@@ -1,23 +1,37 @@
-// 插件入口：注册侧栏面板、工具栏按钮、块菜单、快捷键，并把思源事件转给 CommentController
+// 插件入口：注册侧栏面板、工具栏按钮、块菜单、快捷键；把思源事件和鼠标悬停转给控制器与浮动卡片
 import {getActiveEditor, IMenuItem, IProtyle, openTab, Plugin} from "siyuan";
+import {findAnchorSpan, findBlockElement} from "./anchor";
+import {BlockBadges} from "./badges";
 import {CommentController} from "./controller";
 import {CommentPanel} from "./panel";
+import {AnchorResolver, ThreadPopover} from "./popover";
+import {ThreadView} from "./threadView";
 import {ATTR_ANCHOR} from "./types";
 import "./index.css";
 
 const DOCK_TYPE = "dock";
+const ANCHOR_SELECTOR = `.protyle-wysiwyg span[${ATTR_ANCHOR}]`;
 
 export default class CommentsPlugin extends Plugin {
     private controller!: CommentController;
+    private view!: ThreadView;
+    private popover!: ThreadPopover;
+    private badges!: BlockBadges;
     private panel?: CommentPanel;
 
     onload() {
         this.addIcons(`<symbol id="iconScComment" viewBox="0 0 32 32">
 <path d="M6 4h20a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H14l-7 5.5V24H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3zm3 6v2.5h14V10H9zm0 5.5V18h10v-2.5H9z"></path>
+</symbol>
+<symbol id="iconScSend" viewBox="0 0 32 32">
+<path d="M16 5l9.5 9.5-2.1 2.1-5.9-5.9V27h-3V10.7l-5.9 5.9-2.1-2.1z"></path>
 </symbol>`);
-        this.controller = new CommentController(() => this.showDock(), (id) => {
+        this.controller = new CommentController((id) => {
             void openTab({app: this.app, doc: {id, action: ["cb-get-hl", "cb-get-focus"]}});
         });
+        this.view = new ThreadView(this.controller);
+        this.popover = new ThreadPopover(this.controller, this.view);
+        this.badges = new BlockBadges(this.controller);
 
         const plugin = this;
         this.addDock({
@@ -30,7 +44,7 @@ export default class CommentsPlugin extends Plugin {
             data: {},
             type: DOCK_TYPE,
             init() {
-                plugin.panel = new CommentPanel(this.element as HTMLElement, plugin.controller);
+                plugin.panel = new CommentPanel(this.element as HTMLElement, plugin.controller, plugin.view);
             },
             destroy() {
                 plugin.panel?.destroy();
@@ -42,7 +56,7 @@ export default class CommentsPlugin extends Plugin {
             langKey: "addComment",
             langText: "评论所选文字",
             hotkey: "⌥⇧M",
-            editorCallback: (protyle: IProtyle) => void this.controller.createInline(protyle),
+            editorCallback: (protyle: IProtyle) => void this.createInline(protyle),
         });
 
         this.eventBus.on("switch-protyle", this.onSwitchProtyle);
@@ -52,12 +66,15 @@ export default class CommentsPlugin extends Plugin {
         this.eventBus.on("click-blockicon", this.onBlockMenu);
         this.eventBus.on("click-editortitleicon", this.onTitleMenu);
         this.eventBus.on("ws-main", this.onWsMain);
+        document.addEventListener("mouseover", this.onMouseover);
+        document.addEventListener("mouseout", this.onMouseout);
+        document.addEventListener("click", this.onBadgeClick);
     }
 
     onLayoutReady() {
-        const rootId = getActiveEditor(false)?.protyle.block.rootID;
-        if (rootId) {
-            this.controller.setCurrent(rootId);
+        const editor = getActiveEditor(false);
+        if (editor) {
+            this.controller.setCurrent(editor.protyle.block.rootID!);
         }
     }
 
@@ -69,7 +86,12 @@ export default class CommentsPlugin extends Plugin {
         this.eventBus.off("click-blockicon", this.onBlockMenu);
         this.eventBus.off("click-editortitleicon", this.onTitleMenu);
         this.eventBus.off("ws-main", this.onWsMain);
+        document.removeEventListener("mouseover", this.onMouseover);
+        document.removeEventListener("mouseout", this.onMouseout);
+        document.removeEventListener("click", this.onBadgeClick);
         this.panel?.destroy();
+        this.popover.destroy();
+        this.badges.destroy();
         this.controller.destroy();
     }
 
@@ -79,9 +101,26 @@ export default class CommentsPlugin extends Plugin {
             icon: "iconScComment",
             tipPosition: "n",
             tip: "评论",
-            click: (protyle) => void this.controller.createInline(protyle.protyle),
+            click: (protyle) => void this.createInline(protyle.protyle),
         });
         return toolbar;
+    }
+
+    /** 划词新建评论：标记文字后在下方弹出卡片，直接写第一条评论 */
+    private async createInline(protyle: IProtyle) {
+        const id = await this.controller.createInline(protyle);
+        if (id) {
+            this.popover.open([id], this.inlineResolver(id, protyle.wysiwyg?.element), {pin: true, focus: true});
+        }
+    }
+
+    private inlineResolver(threadId: string, root?: Element | null): AnchorResolver {
+        return () => findAnchorSpan(threadId, root);
+    }
+
+    /** 块评论卡片挂在块右侧的标记上；标记尚未渲染时挂在块上 */
+    private blockResolver(blockId: string, root?: Element | null): AnchorResolver {
+        return () => this.badges.findBadge(blockId) ?? (root ? findBlockElement(root, blockId) : null);
     }
 
     /** 打开侧栏面板；面板已显示时不做切换，浮动收起状态下把它浮出来 */
@@ -107,6 +146,53 @@ export default class CommentsPlugin extends Plugin {
         return !!protyle.model;
     }
 
+    /** 鼠标下的评论锚点：未解决的划词高亮，或块评论标记 */
+    private anchorAt(target: EventTarget | null): { element: Element, threadIds: string[], resolver: AnchorResolver } | undefined {
+        if (!(target instanceof Element)) {
+            return undefined;
+        }
+        const span = target.closest(ANCHOR_SELECTOR);
+        if (span) {
+            const id = span.getAttribute(ATTR_ANCHOR)!;
+            const item = this.controller.findThread(id);
+            if (item?.thread.status !== "open") {
+                return undefined;
+            }
+            return {element: span, threadIds: [id], resolver: this.inlineResolver(id, span.closest(".protyle-wysiwyg"))};
+        }
+        const badge = target.closest<HTMLElement>(".sc-badge");
+        if (badge) {
+            const blockId = badge.dataset.blockId!;
+            return {
+                element: badge,
+                threadIds: badge.dataset.threadIds!.split(","),
+                resolver: this.blockResolver(blockId, badge.closest(".protyle")?.querySelector(".protyle-wysiwyg")),
+            };
+        }
+        return undefined;
+    }
+
+    private readonly onMouseover = (event: MouseEvent) => {
+        const anchor = this.anchorAt(event.target);
+        if (anchor) {
+            this.popover.hover(anchor.threadIds, anchor.resolver);
+        }
+    };
+
+    private readonly onMouseout = (event: MouseEvent) => {
+        const anchor = this.anchorAt(event.target);
+        if (anchor && !(event.relatedTarget instanceof Node && anchor.element.contains(event.relatedTarget))) {
+            this.popover.leave();
+        }
+    };
+
+    private readonly onBadgeClick = (event: MouseEvent) => {
+        const anchor = this.anchorAt(event.target);
+        if (anchor && (event.target as Element).closest(".sc-badge")) {
+            this.popover.open(anchor.threadIds, anchor.resolver, {pin: true});
+        }
+    };
+
     private readonly onSwitchProtyle = ({detail}: CustomEvent<{ protyle: IProtyle }>) => {
         if (this.isTabEditor(detail.protyle)) {
             this.controller.setCurrent(detail.protyle.block.rootID!);
@@ -115,6 +201,7 @@ export default class CommentsPlugin extends Plugin {
 
     private readonly onLoadedProtyle = ({detail}: CustomEvent<{ protyle: IProtyle }>) => {
         const rootId = detail.protyle.block.rootID!;
+        this.badges.attach(detail.protyle);
         if (this.isTabEditor(detail.protyle) &&
             (!this.controller.currentRootId || getActiveEditor(false)?.protyle === detail.protyle)) {
             this.controller.setCurrent(rootId);
@@ -126,18 +213,18 @@ export default class CommentsPlugin extends Plugin {
     };
 
     private readonly onDestroyProtyle = ({detail}: CustomEvent<{ protyle: IProtyle }>) => {
+        this.badges.detach(detail.protyle);
         this.controller.release(detail.protyle.block.rootID!);
     };
 
+    /** 点击高亮文字：弹出并固定讨论卡片 */
     private readonly onClickEditor = ({detail}: CustomEvent<{ protyle: IProtyle, event: MouseEvent }>) => {
-        const anchor = (detail.event.target as Element).closest?.(`span[${ATTR_ANCHOR}]`);
+        const anchor = this.anchorAt(detail.event.target);
         if (anchor) {
             if (this.isTabEditor(detail.protyle)) {
                 this.controller.setCurrent(detail.protyle.block.rootID!);
             }
-            this.controller.select(anchor.getAttribute(ATTR_ANCHOR)!, true);
-        } else if (this.controller.activeThreadId) {
-            this.controller.select(undefined);
+            this.popover.open(anchor.threadIds, anchor.resolver, {pin: true});
         }
     };
 
@@ -146,11 +233,17 @@ export default class CommentsPlugin extends Plugin {
             return;
         }
         const block = detail.blockElements[0];
+        const blockId = block.dataset.nodeId!;
         detail.menu.addItem({
             icon: "iconScComment",
             label: "评论",
-            click: () => void this.controller.createBlock(detail.protyle.block.rootID!, block.dataset.nodeId!,
-                (block.querySelector("[contenteditable]")?.textContent ?? block.textContent ?? "").trim()),
+            click: async () => {
+                const text = (block.querySelector("[contenteditable]")?.textContent ?? block.textContent ?? "").trim();
+                const id = await this.controller.createBlock(detail.protyle.block.rootID!, blockId, text);
+                if (id) {
+                    this.popover.open([id], this.blockResolver(blockId, detail.protyle.wysiwyg?.element), {pin: true, focus: true});
+                }
+            },
         });
     };
 
@@ -158,7 +251,10 @@ export default class CommentsPlugin extends Plugin {
         detail.menu.addItem({
             icon: "iconScComment",
             label: "评论此文档",
-            click: () => void this.controller.createDoc(detail.protyle.block.rootID!),
+            click: () => {
+                this.showDock();
+                void this.controller.createDoc(detail.protyle.block.rootID!);
+            },
         });
     };
 

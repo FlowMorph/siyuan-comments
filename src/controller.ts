@@ -20,7 +20,7 @@ export class CommentController {
     /** 刚创建、还没写第一条评论的讨论串，面板据此自动聚焦输入框 */
     draftThreadId?: string;
 
-    constructor(private readonly showDock: () => void, private readonly openBlock: (id: string) => void) {
+    constructor(private readonly openBlock: (id: string) => void) {
     }
 
     onChange(listener: () => void) {
@@ -28,7 +28,8 @@ export class CommentController {
         return () => this.listeners.delete(listener);
     }
 
-    private emit() {
+    /** 状态或视图状态（展开、编辑中）变化后通知面板、浮动卡片和高亮重绘 */
+    emit() {
         this.highlighter.update(Array.from(this.cache.values()).flat(), this.activeThreadId);
         this.listeners.forEach(listener => listener());
     }
@@ -89,6 +90,28 @@ export class CommentController {
         return this.cache.has(rootId);
     }
 
+    /** 在所有已缓存文档中查找讨论串 */
+    findThread(threadId: string): DocThread | undefined {
+        for (const list of this.cache.values()) {
+            const item = list.find(entry => entry.thread.id === threadId);
+            if (item) {
+                return item;
+            }
+        }
+        return undefined;
+    }
+
+    /** 某个文档里挂在指定块上的未解决块评论 */
+    openBlockThreads(rootId: string): Map<string, DocThread[]> {
+        const result = new Map<string, DocThread[]>();
+        for (const item of this.cache.get(rootId) ?? []) {
+            if (item.thread.anchor === "block" && item.thread.status === "open") {
+                result.set(item.blockId, [...(result.get(item.blockId) ?? []), item]);
+            }
+        }
+        return result;
+    }
+
     /** 判断内核推送的事务是否涉及评论数据，涉及时刷新对应文档 */
     handleOperation(op: { action: string, id?: string, rootID?: string, data?: any }) {
         let touches = false;
@@ -113,7 +136,7 @@ export class CommentController {
         return {id: newId(), anchor, quote, status: "open", created: now(), comments: []};
     }
 
-    /** 新讨论串写入后立即放进缓存并打开面板，不等内核索引 */
+    /** 新讨论串写入后立即放进缓存，不等内核索引；由调用方决定在浮动卡片还是面板里输入首条评论 */
     private async addDraft(rootId: string, blockId: string, thread: Thread) {
         const indexes = blockId === rootId ? {} : await getBlocksIndexes([blockId]);
         const list = this.cache.get(rootId) ?? [];
@@ -123,35 +146,38 @@ export class CommentController {
         this.currentRootId = rootId;
         this.activeThreadId = thread.id;
         this.draftThreadId = thread.id;
-        this.showDock();
         this.emit();
     }
 
-    async createInline(protyle: IProtyle) {
+    /** 以下三个创建方法成功时返回新讨论串 id，失败时提示并返回 undefined */
+    async createInline(protyle: IProtyle): Promise<string | undefined> {
         try {
             let thread: Thread | undefined;
             const blockId = wrapSelection(protyle, (quote) => (thread = this.newThread("inline", quote)));
             await this.addDraft(protyle.block.rootID!, blockId, thread!);
+            return thread!.id;
         } catch (e) {
             this.fail(e);
         }
     }
 
-    async createBlock(rootId: string, blockId: string, text: string) {
+    async createBlock(rootId: string, blockId: string, text: string): Promise<string | undefined> {
         try {
             const thread = this.newThread("block", text.slice(0, 120));
             await mutateThreads(blockId, threads => [...threads, thread]);
             await this.addDraft(rootId, blockId, thread);
+            return thread.id;
         } catch (e) {
             this.fail(e);
         }
     }
 
-    async createDoc(rootId: string) {
+    async createDoc(rootId: string): Promise<string | undefined> {
         try {
             const thread = this.newThread("doc", "");
             await mutateThreads(rootId, threads => [...threads, thread]);
             await this.addDraft(rootId, rootId, thread);
+            return thread.id;
         } catch (e) {
             this.fail(e);
         }
@@ -184,9 +210,9 @@ export class CommentController {
         }));
     }
 
-    /** 删除单条评论；删到一条不剩时连讨论串（和锚点）一起删除 */
+    /** 删除单条评论；与 Notion 一致，删除第一条评论即删除整个讨论串（连同锚点） */
     deleteComment(item: DocThread, commentId: string) {
-        if (item.thread.comments.length <= 1) {
+        if (item.thread.comments[0]?.id === commentId || item.thread.comments.length <= 1) {
             return this.deleteThread(item);
         }
         return this.run(item, () => updateThread(item.blockId, item.thread.id, (thread) => {
@@ -217,12 +243,12 @@ export class CommentController {
         }));
     }
 
-    /** 选中讨论串；fromEditor 表示由点击正文锚点触发，需要把面板调出来 */
-    select(threadId: string | undefined, fromEditor = false) {
-        this.activeThreadId = threadId;
-        if (fromEditor) {
-            this.showDock();
+    /** 选中讨论串：正文锚点加深高亮，面板里对应卡片高亮 */
+    select(threadId: string | undefined) {
+        if (this.activeThreadId === threadId) {
+            return;
         }
+        this.activeThreadId = threadId;
         this.emit();
     }
 
