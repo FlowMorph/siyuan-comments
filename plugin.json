@@ -1,11 +1,17 @@
 {
   "name": "siyuan-comments",
-  "author": "wangchen",
-  "url": "",
+  "author": "FlowMorph",
+  "url": "https://github.com/FlowMorph/siyuan-comments",
   "version": "0.1.0",
   "minAppVersion": "3.8.0",
-  "backends": ["all"],
-  "frontends": ["desktop", "desktop-window", "browser-desktop"],
+  "backends": [
+    "all"
+  ],
+  "frontends": [
+    "desktop",
+    "desktop-window",
+    "browser-desktop"
+  ],
   "displayName": {
     "default": "Comments",
     "zh_CN": "评论"

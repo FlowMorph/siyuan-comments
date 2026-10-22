@@ -11,6 +11,24 @@
 - 悬停评论出现 ✓（解决，仅第一条）、编辑、删除；删除按钮点一下变成「?」，再点一次才删除。删除第一条评论会删除整个讨论串。
 - 点击高亮文字会固定卡片；点面板里的讨论串定位到正文。
 
+## 和 AI 协作
+
+[tools/siyuan_comments.py](tools/siyuan_comments.py) 是给 AI 代理（例如 Claude Code）用的命令行工具：列出未解决的讨论串、查看原文和整篇文档上下文、以 AI 身份回复、标记解决。写入后插件面板实时刷新。工具通过本机思源内核 API（127.0.0.1:6806）工作，token 从当前工作空间的 `conf/conf.json` 读取。
+
+```bash
+python3 tools/siyuan_comments.py list            # 列出全部未解决讨论串
+python3 tools/siyuan_comments.py show <id>       # 讨论串和所在块原文
+echo "回复内容" | python3 tools/siyuan_comments.py reply <id> -
+```
+
+## 开发
+
+需要 Node.js。`npm install` 后 `npm run build` 生成 `dist/`，把 `dist/` 软链或复制到工作空间的 `data/plugins/siyuan-comments`，在思源 设置 → 集市 → 已下载 中启用。项目结构见 [docs/index.md](docs/index.md)。
+
 ## 数据
 
 讨论串以 JSON 存在块属性 `custom-comments` 里，划词评论的正文标记是带 `custom-comment-id` 属性的行内片段，本身没有样式。卸载插件后正文外观不变，评论数据仍保留在块属性中。
+
+## 许可
+
+MIT

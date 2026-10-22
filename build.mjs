@@ -4,7 +4,7 @@ import {cpSync, mkdirSync} from "node:fs";
 
 const watch = process.argv.includes("--watch");
 mkdirSync("dist", {recursive: true});
-for (const file of ["plugin.json", "README.md", "icon.png"]) {
+for (const file of ["plugin.json", "README.md", "icon.png", "LICENSE"]) {
     cpSync(file, `dist/${file}`);
 }
 
