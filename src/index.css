@@ -162,7 +162,8 @@
     transition: opacity .1s ease;
 }
 
-.sc-comment:hover .sc-comment__actions {
+.sc-comment:hover .sc-comment__actions,
+.sc-comment--armed .sc-comment__actions {
     opacity: 1;
     pointer-events: auto;
 }
@@ -182,6 +183,22 @@
 .sc-action:hover {
     background-color: var(--b3-list-hover);
     color: var(--b3-theme-on-background);
+}
+
+/* 删除待确认：按钮原地变成红色问号 */
+.sc-action--confirm,
+.sc-action--confirm:hover {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--b3-card-error-color);
+    background-color: var(--b3-card-error-background);
+    animation: sc-pop .15s var(--sc-ease);
+}
+
+@keyframes sc-pop {
+    from {
+        transform: scale(.7);
+    }
 }
 
 .sc-action svg {

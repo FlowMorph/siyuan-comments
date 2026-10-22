@@ -1,12 +1,14 @@
 // 讨论串卡片的渲染与交互，侧栏面板和正文浮动卡片共用一份，样式和行为对齐 Notion：
-// 头像 + 名字 + 相对时间；悬停评论时右上角出现 ✓（仅第一条）和 ⋯；底部输入框回车发送、Shift+回车换行。
+// 头像 + 名字 + 相对时间；悬停评论时右上角出现 ✓（仅第一条）、编辑、删除；底部输入框回车发送、Shift+回车换行。
+// 删除不弹对话框：第一次点击按钮变成「?」，再点一次才删除，几秒内不点或鼠标移出评论则恢复。
 // 输入框草稿、编辑中的评论、展开状态都存在这里，两处显示同一讨论串时互相同步。
-import {confirm, Menu} from "siyuan";
 import {CommentController} from "./controller";
 import {renderMarkdown, renderMath} from "./markdown";
 import {Comment, DocThread} from "./types";
 
 const COLLAPSE_THRESHOLD = 3;
+/** 删除按钮变成「?」后等待再次点击的时长 */
+const DELETE_CONFIRM_MS = 3000;
 
 export function escapeHTML(text: string) {
     const div = document.createElement("div");
@@ -72,6 +74,9 @@ export class ThreadView {
     private readonly seenComments = new Set<string>();
     /** 每个容器上次渲染的 HTML，内容没变时跳过重绘，避免打断选中文字和悬停状态 */
     private readonly lastHTML = new WeakMap<HTMLElement, string>();
+    /** 已点过一次删除、等待确认的评论 */
+    private armedDeleteId?: string;
+    private disarmTimer = 0;
 
     constructor(private readonly controller: CommentController) {
     }
@@ -121,9 +126,13 @@ export class ThreadView {
 </div>` : `<div class="sc-comment__body b3-typography">${renderMarkdown(comment.content)}</div>`;
         const resolveAction = first && item.thread.status === "open" ?
             `<span class="sc-action ariaLabel" data-position="north" data-action="resolve" aria-label="解决">${icon("iconCheck")}</span>` : "";
+        const armed = this.armedDeleteId === comment.id;
+        const deleteAction = armed ?
+            `<span class="sc-action sc-action--confirm ariaLabel" data-position="north" data-action="delete" aria-label="再点一次删除${first ? "整个讨论串" : ""}">?</span>` :
+            `<span class="sc-action ariaLabel" data-position="north" data-action="delete" aria-label="${first ? "删除讨论串" : "删除评论"}">${icon("iconTrashcan")}</span>`;
         const fresh = !this.seenComments.has(comment.id);
         this.seenComments.add(comment.id);
-        return `<div class="sc-comment${editing ? " sc-comment--editing" : ""}${fresh ? " sc-comment--new" : ""}" data-comment-id="${comment.id}">
+        return `<div class="sc-comment${editing ? " sc-comment--editing" : ""}${fresh ? " sc-comment--new" : ""}${armed ? " sc-comment--armed" : ""}" data-comment-id="${comment.id}">
     ${avatar(comment.author)}
     <div class="sc-comment__main">
         <div class="sc-comment__meta">
@@ -132,7 +141,7 @@ export class ThreadView {
         </div>
         ${body}
     </div>
-    ${editing ? "" : `<div class="sc-comment__actions">${resolveAction}<span class="sc-action ariaLabel" data-position="north" data-action="comment-menu" data-menu="true" aria-label="更多">${icon("iconMore")}</span></div>`}
+    ${editing ? "" : `<div class="sc-comment__actions">${resolveAction}<span class="sc-action ariaLabel" data-position="north" data-action="edit" aria-label="编辑">${icon("iconEdit")}</span>${deleteAction}</div>`}
 </div>`;
     }
 
@@ -222,19 +231,25 @@ export class ThreadView {
         }
     }
 
-    private openCommentMenu(item: DocThread, comment: Comment, event: MouseEvent, root: HTMLElement) {
-        const first = item.thread.comments[0]?.id === comment.id;
-        const menu = new Menu("sc-comment-menu");
-        menu.addItem({icon: "iconEdit", label: "编辑评论", click: () => this.startEdit(comment, root)});
-        menu.addItem({
-            icon: "iconTrashcan",
-            label: first ? "删除讨论串" : "删除评论",
-            click: () => confirm(first ? "删除讨论串" : "删除评论",
-                first ? "删除第一条评论会删除整个讨论串及其全部回复。" : "确定删除这条评论？",
-                () => void this.controller.deleteComment(item, comment.id)),
-        });
-        const rect = (event.target as Element).closest("[data-action]")!.getBoundingClientRect();
-        menu.open({x: rect.right, y: rect.bottom + 4, isLeft: true});
+    /** 第一次点击把删除按钮变成「?」，再次点击才删除；与 Notion 一致，删除第一条评论即删除整个讨论串 */
+    private clickDelete(item: DocThread, comment: Comment) {
+        window.clearTimeout(this.disarmTimer);
+        if (this.armedDeleteId === comment.id) {
+            this.armedDeleteId = undefined;
+            void this.controller.deleteComment(item, comment.id);
+            return;
+        }
+        this.armedDeleteId = comment.id;
+        this.disarmTimer = window.setTimeout(() => this.disarm(), DELETE_CONFIRM_MS);
+        this.controller.emit();
+    }
+
+    private disarm() {
+        window.clearTimeout(this.disarmTimer);
+        if (this.armedDeleteId) {
+            this.armedDeleteId = undefined;
+            this.controller.emit();
+        }
     }
 
     /** 在容器上绑定交互，返回解绑函数 */
@@ -307,8 +322,11 @@ export class ThreadView {
                 case "cancel-edit":
                     this.stopEdit(item, this.findComment(item, target)!, false);
                     break;
-                case "comment-menu":
-                    this.openCommentMenu(item, this.findComment(item, target)!, event, root);
+                case "edit":
+                    this.startEdit(this.findComment(item, target)!, root);
+                    break;
+                case "delete":
+                    this.clickDelete(item, this.findComment(item, target)!);
                     break;
                 default:
                     if (!target.closest("textarea, button, a")) {
@@ -317,13 +335,27 @@ export class ThreadView {
             }
         };
 
+        // 鼠标移出待确认删除的评论时恢复删除按钮
+        const onMouseout = (event: MouseEvent) => {
+            // 重绘时被替换掉的旧元素也可能触发 mouseout，忽略
+            if (!this.armedDeleteId || !(event.target as Node).isConnected) {
+                return;
+            }
+            const comment = (event.target as Element).closest?.(`[data-comment-id="${this.armedDeleteId}"]`);
+            if (comment && !(event.relatedTarget instanceof Node && comment.contains(event.relatedTarget))) {
+                this.disarm();
+            }
+        };
+
         root.addEventListener("input", onInput);
         root.addEventListener("keydown", onKeydown);
         root.addEventListener("click", onClick);
+        root.addEventListener("mouseout", onMouseout);
         return () => {
             root.removeEventListener("input", onInput);
             root.removeEventListener("keydown", onKeydown);
             root.removeEventListener("click", onClick);
+            root.removeEventListener("mouseout", onMouseout);
         };
     }
 }
