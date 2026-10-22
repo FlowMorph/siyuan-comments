@@ -119,7 +119,8 @@ def print_thread(thread, indent="  "):
     status = "未解决" if thread["status"] == "open" else "已解决"
     print(f"{indent}[{thread['id']}] {kind}评论 · {status}")
     if thread.get("quote"):
-        print(f"{indent}  原文：{thread['quote']}")
+        quote = thread["quote"].replace("\n", "\n" + indent + "        ")
+        print(f"{indent}  原文：{quote}")
     for c in thread["comments"]:
         who = "AI" if c["author"] == "ai" else "用户"
         body = c["content"].replace("\n", "\n" + indent + "    ")
@@ -152,16 +153,38 @@ def cmd_list(args):
         print()
 
 
+def anchor_blocks(thread_id):
+    """带该讨论串锚点的块（跨段落评论有多个），按文档顺序"""
+    rows = sql(f"select block_id, value from attributes where name='custom-comment-id' and value like '%{thread_id}%' limit 1000")
+    ids = list(dict.fromkeys(r["block_id"] for r in rows if thread_id in r["value"].split()))
+    if len(ids) > 1:
+        indexes = post("/api/block/getBlocksIndexes", {"ids": ids})
+        ids.sort(key=lambda i: indexes.get(i, 0))
+    return ids
+
+
+def readable(markdown, thread_id):
+    """块 markdown 去掉 IAL 和行内 span 标签，当前讨论串评论的文字用【】标出"""
+    text = re.sub(r"\{: [^}]*\}", "", markdown)
+    text = re.sub(r'<span [^>]*custom-comment-id="[^"]*\b' + re.escape(thread_id) + r'\b[^"]*"[^>]*>(.*?)</span>', r"【\1】", text)
+    return re.sub(r"</?span[^>]*>", "", text).strip()
+
+
 def cmd_show(args):
     block_id, _ = find_thread(args[0])
     threads = json.loads(post("/api/attr/getBlockAttrs", {"id": block_id}).get(ATTR_THREADS) or "[]")
     thread = next(t for t in threads if t["id"] == args[0])
     info = block_info(block_id)
     print(f"文档：{info['hpath']}（{info['root_id']}）")
-    print(f"所在块：{block_id}（{info['type']}）")
+    blocks = [block_id]
+    if thread["anchor"] == "inline":
+        blocks = anchor_blocks(args[0]) or [block_id]
     if thread["anchor"] != "doc":
-        print("块原文：")
-        print("  " + re.sub(r"\{: [^}]*\}", "", info["markdown"]).strip().replace("\n", "\n  "))
+        print("所在块原文：" if len(blocks) == 1 else f"所在块原文（跨 {len(blocks)} 个块）：")
+        for bid in blocks:
+            b = block_info(bid)
+            print(f"  [{bid}]（{b['type']}）")
+            print("    " + readable(b["markdown"], args[0]).replace("\n", "\n    "))
     print()
     print_thread(thread, indent="")
 

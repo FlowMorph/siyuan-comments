@@ -19,18 +19,18 @@ export class Highlighter {
     }
 
     update(threads: DocThread[], activeId?: string) {
-        const byBlock = new Map<string, string[]>();
-        for (const {blockId, thread} of threads) {
+        const byDoc = new Map<string, string[]>();
+        for (const {rootId, thread} of threads) {
             if (thread.status === "open" && thread.anchor === "inline") {
-                byBlock.set(blockId, [...(byBlock.get(blockId) ?? []), thread.id]);
+                byDoc.set(rootId, [...(byDoc.get(rootId) ?? []), thread.id]);
             }
         }
         const single: string[] = [];
         const overlap: string[] = [];
-        byBlock.forEach((ids) => {
+        byDoc.forEach((ids) => {
             ids.forEach((id, i) => {
                 single.push(`${ANCHOR_BASE}${has(id)}`);
-                // 重叠只会发生在同一块内，按块两两生成
+                // 讨论串可跨段落，重叠只会发生在同一文档内，按文档两两生成
                 ids.slice(i + 1).forEach(other => overlap.push(`${ANCHOR_BASE}${has(id)}${has(other)}`));
             });
         });

@@ -1,10 +1,10 @@
-// 行内锚点：把选中文字切成若干行内片段，片段带 custom-comment-id 属性（空格分隔的讨论串 id 列表），
+// 行内锚点：把选中文字（可跨段落）切成若干行内片段，片段带 custom-comment-id 属性（空格分隔的讨论串 id 列表），
 // 因此评论区域可以重叠或嵌套（先评论整段，再评论其中一句）。
 // 每个片段的 data-type 都含 "text"：Lute 保存时会把相邻同类型、且前一个没有属性的行内元素合并，
 // 加上 "text" 后片段与两侧原有元素类型不同，评论范围不会被合并扩大。
 // Lute 会把行内 custom-* 属性存进 kramdown 的 span IAL；插件卸载后正文外观不变。
 import {getAllEditor, IProtyle} from "siyuan";
-import {getBlockDOM, updateBlockDOM} from "./api";
+import {flushTransaction, getBlockDOM, sql, updateBlockDOM} from "./api";
 import {ATTR_ANCHOR, ATTR_THREADS, Thread} from "./types";
 
 function closestBlock(node: Node | null): HTMLElement | null {
@@ -42,8 +42,20 @@ function currentRange(protyle: IProtyle): Range | null {
     return null;
 }
 
-/** 选区覆盖的文本节点。先在边界处拆分文本节点，使每个返回的节点都整段落在选区内 */
-function selectedTextNodes(editable: HTMLElement, range: Range): Text[] {
+const UNCOMMENTABLE_BLOCKS = ["NodeCodeBlock", "NodeMathBlock", "NodeHTMLBlock"];
+
+interface SelectedText {
+    node: Text;
+    editable: HTMLElement;
+    /** 节点所在的叶子块 */
+    block: HTMLElement;
+}
+
+/**
+ * 选区覆盖的文本节点（可跨块）。先在边界处拆分文本节点，使每个返回的节点都整段落在选区内；
+ * 跳过代码块、公式块、HTML 块和公式等不可编辑的行内元素。
+ */
+function selectedTextNodes(wysiwyg: HTMLElement, range: Range): SelectedText[] {
     // 先拆终点再拆起点：同一节点时起点偏移不受影响；Range 是活动对象，拆分后边界会自动跟随
     if (range.endContainer instanceof Text && range.endOffset > 0 && range.endOffset < range.endContainer.length) {
         range.endContainer.splitText(range.endOffset);
@@ -51,8 +63,10 @@ function selectedTextNodes(editable: HTMLElement, range: Range): Text[] {
     if (range.startContainer instanceof Text && range.startOffset > 0 && range.startOffset < range.startContainer.length) {
         range.startContainer.splitText(range.startOffset);
     }
-    const nodes: Text[] = [];
-    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+    const common = range.commonAncestorContainer;
+    const walkRoot = common instanceof Element ? common : common.parentElement!;
+    const result: SelectedText[] = [];
+    const walker = document.createTreeWalker(walkRoot, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
         if (!range.intersectsNode(node) || !node.data.replace(/\u200b/g, "")) {
             continue;
@@ -62,17 +76,24 @@ function selectedTextNodes(editable: HTMLElement, range: Range): Text[] {
             (node === range.endContainer && range.endOffset === 0)) {
             continue;
         }
-        // 公式等不可编辑的行内元素不拆分
-        const locked = node.parentElement?.closest('[contenteditable="false"]');
+        const editable = node.parentElement?.closest<HTMLElement>('[contenteditable="true"]');
+        if (!editable || !wysiwyg.contains(editable)) {
+            continue;
+        }
+        const locked = node.parentElement!.closest('[contenteditable="false"]');
         if (locked && editable.contains(locked)) {
             continue;
         }
-        nodes.push(node);
+        const block = closestBlock(editable);
+        if (!block || UNCOMMENTABLE_BLOCKS.includes(block.dataset.type!)) {
+            continue;
+        }
+        result.push({node, editable, block});
     }
-    return nodes;
+    return result;
 }
 
-/** 把一个文本节点变成带讨论串 id 的行内片段，返回该片段 */
+/** 把一个文本节点变成带讨论串 id 的行内片段，返回该片段。editable 为节点所在的可编辑区 */
 function markTextNode(editable: HTMLElement, node: Text, threadId: string): HTMLElement {
     const parent = node.parentElement!;
     let piece: HTMLElement;
@@ -109,42 +130,37 @@ function markTextNode(editable: HTMLElement, node: Text, threadId: string): HTML
 }
 
 /**
- * 把选中文字标为评论锚点，并把新讨论串写进所在块的属性，两者在同一个编辑器事务里提交：
+ * 把选中文字（可跨块）标为评论锚点，并把新讨论串写进第一个块的属性。
+ * 所有涉及的块在同一个编辑器事务里提交（一次撤销整体撤回）：
  * 若改用 setBlockAttrs 接口写属性，可能被编辑器稍后提交的旧块 DOM 覆盖。
- * 选区不合法时抛出带提示文字的错误。返回所在块 id。
+ * 选区不合法时抛出带提示文字的错误。返回存放讨论串的块 id。
  */
 export function wrapSelection(protyle: IProtyle, createThread: (quote: string) => Thread): string {
     const range = currentRange(protyle);
     if (!range) {
         throw new Error("请先选中要评论的文字");
     }
-    const blockElement = closestBlock(range.startContainer);
-    if (!blockElement || blockElement !== closestBlock(range.endContainer)) {
-        throw new Error("划词评论暂只支持单个块内的选区");
+    const selected = selectedTextNodes(protyle.wysiwyg!.element, range);
+    if (!selected.length) {
+        throw new Error("所选内容里没有可评论的文字（代码块、公式块请用块评论）");
     }
-    if (["NodeCodeBlock", "NodeMathBlock", "NodeHTMLBlock"].includes(blockElement.dataset.type!)) {
-        throw new Error("代码块、公式块和 HTML 块请用块评论");
-    }
-    const editable = (range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer :
-        range.commonAncestorContainer.parentElement)!.closest<HTMLElement>('[contenteditable="true"]');
-    if (!editable || !blockElement.contains(editable)) {
-        throw new Error("请在可编辑的文字中选择");
-    }
-    const quote = range.toString();
-    const oldHTML = blockElement.outerHTML;
+    const blocks = Array.from(new Set(selected.map(item => item.block)));
+    // 原文引用按块换行拼接
+    const quote = blocks.map(block => selected.filter(item => item.block === block)
+        .map(item => item.node.data).join("")).join("\n");
     const thread = createThread(quote);
-    const nodes = selectedTextNodes(editable, range);
-    if (!nodes.length) {
-        throw new Error("所选内容里没有可评论的文字");
-    }
-    nodes.forEach(node => markTextNode(editable, node, thread.id));
-    const threads: Thread[] = JSON.parse(blockElement.getAttribute(ATTR_THREADS) || "[]");
-    threads.push(thread);
-    blockElement.setAttribute(ATTR_THREADS, JSON.stringify(threads));
+    protyle.getInstance().updateBatchTransaction(blocks, (block) => {
+        selected.filter(item => item.block === block)
+            .forEach(item => markTextNode(item.editable, item.node, thread.id));
+        if (block === blocks[0]) {
+            const threads: Thread[] = JSON.parse(block.getAttribute(ATTR_THREADS) || "[]");
+            threads.push(thread);
+            block.setAttribute(ATTR_THREADS, JSON.stringify(threads));
+        }
+    });
     window.getSelection()?.removeAllRanges();
     protyle.toolbar?.element.classList.add("fn__none");
-    protyle.getInstance().updateTransactionElement(blockElement, oldHTML);
-    return blockElement.dataset.nodeId!;
+    return blocks[0].dataset.nodeId!;
 }
 
 /**
@@ -177,25 +193,43 @@ function stripThread(blockElement: Element, threadId: string) {
 }
 
 /**
- * 删除行内讨论串。讨论串和锚点在同一次块更新里删除，避免编辑器随后提交的旧 DOM 把属性写回去。
- * 块已在编辑器中打开时走编辑器事务（可撤销），否则直接改块 DOM。
+ * 删除行内讨论串：存放讨论串的块去掉属性，所有带锚点的块（跨段落时有多个）去掉片段上的 id，在同一次更新里完成，
+ * 避免编辑器随后提交的旧 DOM 把属性写回去。
+ * 涉及的块由编辑器 DOM 和 SQL 索引合并得出（长文档可能只加载了一部分块）；
+ * 已加载的块走编辑器批量事务（可撤销），其余直接改块 DOM。
  */
-export async function deleteInlineThread(blockId: string, threadId: string) {
+export async function deleteInlineThread(storageBlockId: string, threadId: string) {
+    await flushTransaction();
+    const rows = await sql<{ block_id: string, value: string }>(
+        `SELECT block_id, value FROM attributes WHERE name = '${ATTR_ANCHOR}' AND value LIKE '%${threadId}%' LIMIT 1000`);
+    const blockIds = new Set([storageBlockId,
+        ...rows.filter(row => row.value.split(/\s+/).includes(threadId)).map(row => row.block_id)]);
     for (const editor of getAllEditor()) {
-        const root = editor.protyle.wysiwyg?.element;
-        const blockElement = root && findBlockElement(root, blockId);
-        if (blockElement) {
-            const oldHTML = blockElement.outerHTML;
-            stripThread(blockElement, threadId);
-            editor.updateTransactionElement(blockElement, oldHTML);
-            return;
-        }
+        editor.protyle.wysiwyg?.element.querySelectorAll(anchorSelector(threadId)).forEach((span) => {
+            const id = closestBlock(span)?.dataset.nodeId;
+            if (id) {
+                blockIds.add(id);
+            }
+        });
     }
-    const template = document.createElement("template");
-    template.innerHTML = await getBlockDOM(blockId);
-    const blockElement = template.content.firstElementChild as HTMLElement;
-    stripThread(blockElement, threadId);
-    await updateBlockDOM(blockId, blockElement.outerHTML);
+
+    const editor = getAllEditor().find(item => item.protyle.wysiwyg &&
+        Array.from(blockIds).some(id => findBlockElement(item.protyle.wysiwyg!.element, id)));
+    const loaded = editor ? Array.from(blockIds).map(id => findBlockElement(editor.protyle.wysiwyg!.element, id))
+        .filter((item): item is HTMLElement => !!item) : [];
+    if (editor && loaded.length) {
+        editor.updateBatchTransaction(loaded, block => stripThread(block, threadId));
+    }
+    for (const id of blockIds) {
+        if (loaded.some(block => block.dataset.nodeId === id)) {
+            continue;
+        }
+        const template = document.createElement("template");
+        template.innerHTML = await getBlockDOM(id);
+        const blockElement = template.content.firstElementChild as HTMLElement;
+        stripThread(blockElement, threadId);
+        await updateBlockDOM(id, blockElement.outerHTML);
+    }
 }
 
 /** 在已打开的编辑器里找锚点或块元素，找到就滚动到视野中央 */

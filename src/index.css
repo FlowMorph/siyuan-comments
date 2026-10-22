@@ -37,6 +37,7 @@
 }
 
 .sc-quote__text {
+    white-space: pre-line;
     flex: 1;
     min-width: 0;
     display: -webkit-box;
