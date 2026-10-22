@@ -58,7 +58,8 @@ export async function loadDocThreads(rootId: string): Promise<DocThread[]> {
     const threadRows: { block_id: string, value: string }[] = [];
     for (const row of rows) {
         if (row.name === ATTR_ANCHOR) {
-            anchors.add(row.value);
+            // 重叠区域的片段同时属于多个讨论串，id 以空格分隔
+            row.value.split(/\s+/).forEach(id => id && anchors.add(id));
         } else {
             threadRows.push(row);
         }

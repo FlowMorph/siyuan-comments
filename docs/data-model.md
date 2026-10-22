@@ -5,8 +5,10 @@
 ## 存储
 
 - 讨论串列表存在锚点所在块的属性 `custom-comments` 里，值是 `Thread[]` 的 JSON。文档级讨论串挂在文档块上。
-- 划词评论在正文里是带 `custom-comment-id="<讨论串 id>"` 的原生下划线：kramdown 中为 `<u>原文</u>{: custom-comment-id="…"}`。
-- SQL `attributes` 表能直接查到两者：`name='custom-comments'`（type `b`，值为原样 JSON）和 `name='custom-comment-id'`（type `s`，行内属性）。面板据此判断「原文已删除」：行内讨论串在同文档里找不到对应的 `custom-comment-id`。
+- 划词评论在正文里是若干行内片段，片段带 `custom-comment-id`，值为空格分隔的讨论串 id 列表；评论区域可以重叠或嵌套，重叠部分的片段同时列出多个 id。kramdown 中如 `<span data-type="text" custom-comment-id="A B">原文</span>{: custom-comment-id="A B"}`。
+- 片段的 `data-type` 总含 `text`（在加粗等元素中为 `strong text`）：Lute 会把相邻同类型、前一个无属性的行内元素合并，类型不同才能保证评论范围不被扩大。删除最后一个 id 时撤掉 `text`（有颜色等 `style` 时保留）。
+- SQL `attributes` 表能直接查到两者：`name='custom-comments'`（type `b`，值为原样 JSON）和 `name='custom-comment-id'`（type `s`，行内属性，值为 id 列表）。面板据此判断「原文已删除」：行内讨论串在同文档里找不到对应 id。
+- 早期版本用原生下划线（`u`）做锚点，2026-10-22 已把工作空间里的旧锚点迁移为 `text`，代码不再兼容旧写法。
 
 ```json
 {
@@ -30,7 +32,7 @@ id 与思源块 id 同格式；时间为 UTC ISO 字符串，显示时转本地�
 - 与 Notion 一致：删除讨论串的第一条评论即删除整个讨论串；删除行内讨论串会去掉正文里的下划线标记。
 - 新建后还没写任何评论就关闭卡片（Esc、点外面）时，讨论串被撤销。
 - 已解决的讨论串在正文中不再高亮、不再浮出卡片，块标记也消失；面板里切到「已解决」查看，可重新打开。
-- 插件卸载后正文只剩普通下划线，`custom-comments` 属性保留。
+- 插件卸载后正文外观不变（锚点片段没有样式），`custom-comments` 属性保留。
 
 ## AI 工作流
 

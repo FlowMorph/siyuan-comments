@@ -2,6 +2,7 @@
    颜色尽量用思源主题变量，深色主题下同样可读。动态高亮规则见 src/highlight.ts */
 :root {
     --sc-anchor-bg: rgba(255, 212, 0, .14);
+    --sc-anchor-bg-overlap: rgba(255, 212, 0, .32);
     --sc-anchor-bg-active: rgba(255, 212, 0, .56);
     --sc-anchor-border: rgba(255, 212, 0, .8);
     /* 第一层用主题边框色，深色主题下卡片边缘依然清楚 */
@@ -11,10 +12,7 @@
     --sc-divider: var(--b3-border-color);
 }
 
-/* 锚点复用原生下划线（思源用 border-bottom 画），插件启用时隐藏，改由高亮规则显示 */
-.protyle-wysiwyg span[data-type~="u"][custom-comment-id] {
-    border-bottom: none;
-    color: inherit;
+.protyle-wysiwyg span[custom-comment-id] {
     transition: background-color .15s ease, border-color .15s ease;
 }
 

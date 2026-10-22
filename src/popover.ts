@@ -12,7 +12,8 @@ const FADE_DURATION = 120;
 const GAP = 6;
 const MARGIN = 8;
 
-export type AnchorResolver = () => Element | null;
+/** 返回锚点元素：行内评论为全部锚点片段（按文档顺序），块评论为块标记；找不到时返回空数组 */
+export type AnchorResolver = () => Element[];
 
 export class ThreadPopover {
     private readonly element: HTMLElement;
@@ -142,16 +143,17 @@ export class ThreadPopover {
     }
 
     private position() {
-        const anchor = this.resolveAnchor?.();
-        if (!anchor) {
+        const anchors = this.resolveAnchor?.() ?? [];
+        if (!anchors.length) {
             this.close();
             return;
         }
-        const rects = anchor.getClientRects();
-        const first = rects[0] ?? anchor.getBoundingClientRect();
-        const last = rects[rects.length - 1] ?? first;
+        const firstRects = anchors[0].getClientRects();
+        const lastRects = anchors[anchors.length - 1].getClientRects();
+        const first = firstRects[0] ?? anchors[0].getBoundingClientRect();
+        const last = lastRects[lastRects.length - 1] ?? first;
         // 锚点滚出编辑区可视范围时暂时隐藏卡片，滚回来再显示（不关闭，保留输入）
-        const viewport = anchor.closest(".protyle-content")?.getBoundingClientRect();
+        const viewport = anchors[0].closest(".protyle-content")?.getBoundingClientRect();
         this.element.classList.toggle("sc-popover--offscreen",
             !!viewport && (last.bottom < viewport.top || first.top > viewport.bottom));
         const width = this.element.offsetWidth;
@@ -210,7 +212,7 @@ export class ThreadPopover {
             return;
         }
         // 点在当前锚点上交给点击事件处理（会固定卡片）
-        if (this.resolveAnchor?.()?.contains(target)) {
+        if (this.resolveAnchor?.().some(anchor => anchor.contains(target))) {
             return;
         }
         if (this.view.hasUnsent(this.threadIds)) {

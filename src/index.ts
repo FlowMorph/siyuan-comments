@@ -1,6 +1,6 @@
 // 插件入口：注册侧栏面板、工具栏按钮、块菜单、快捷键；把思源事件和鼠标悬停转给控制器与浮动卡片
 import {getActiveEditor, IMenuItem, IProtyle, openTab, Plugin} from "siyuan";
-import {findAnchorSpan, findBlockElement} from "./anchor";
+import {anchorIds, findAnchorSpans, findBlockElement} from "./anchor";
 import {BlockBadges} from "./badges";
 import {CommentController} from "./controller";
 import {CommentPanel} from "./panel";
@@ -121,12 +121,15 @@ export default class CommentsPlugin extends Plugin {
     }
 
     private inlineResolver(threadId: string, root?: Element | null): AnchorResolver {
-        return () => findAnchorSpan(threadId, root);
+        return () => findAnchorSpans(threadId, root);
     }
 
     /** 块评论卡片挂在块右侧的标记上；标记尚未渲染时挂在块上 */
     private blockResolver(blockId: string, root?: Element | null): AnchorResolver {
-        return () => this.badges.findBadge(blockId) ?? (root ? findBlockElement(root, blockId) : null);
+        return () => {
+            const element = this.badges.findBadge(blockId) ?? (root ? findBlockElement(root, blockId) : null);
+            return element ? [element] : [];
+        };
     }
 
     /** 打开侧栏面板；面板已显示时不做切换，浮动收起状态下把它浮出来 */
@@ -159,12 +162,16 @@ export default class CommentsPlugin extends Plugin {
         }
         const span = target.closest(ANCHOR_SELECTOR);
         if (span) {
-            const id = span.getAttribute(ATTR_ANCHOR)!;
-            const item = this.controller.findThread(id);
-            if (item?.thread.status !== "open") {
+            const root = span.closest(".protyle-wysiwyg");
+            // 重叠区域属于多条讨论串：只取未解决的，范围小的（内层）排前，卡片定位到内层那条
+            const length = (id: string) => findAnchorSpans(id, root).reduce((sum, item) => sum + (item.textContent?.length ?? 0), 0);
+            const threadIds = anchorIds(span)
+                .filter(id => this.controller.findThread(id)?.thread.status === "open")
+                .sort((a, b) => length(a) - length(b));
+            if (!threadIds.length) {
                 return undefined;
             }
-            return {element: span, threadIds: [id], resolver: this.inlineResolver(id, span.closest(".protyle-wysiwyg"))};
+            return {element: span, threadIds, resolver: this.inlineResolver(threadIds[0], root)};
         }
         const badge = target.closest<HTMLElement>(".sc-badge");
         if (badge) {
