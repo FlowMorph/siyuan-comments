@@ -4,8 +4,10 @@
     --sc-anchor-bg: rgba(255, 212, 0, .14);
     --sc-anchor-bg-active: rgba(255, 212, 0, .56);
     --sc-anchor-border: rgba(255, 212, 0, .8);
-    --sc-shadow: rgba(15, 15, 15, .05) 0 0 0 1px, rgba(15, 15, 15, .1) 0 3px 6px, rgba(15, 15, 15, .2) 0 9px 24px;
-    --sc-action-shadow: rgba(15, 15, 15, .1) 0 0 0 1px, rgba(15, 15, 15, .1) 0 2px 4px;
+    /* 第一层用主题边框色，深色主题下卡片边缘依然清楚 */
+    --sc-shadow: 0 0 0 1px var(--b3-border-color), rgba(15, 15, 15, .1) 0 3px 6px, rgba(15, 15, 15, .2) 0 9px 24px;
+    --sc-action-shadow: 0 0 0 1px var(--b3-border-color), rgba(15, 15, 15, .1) 0 2px 4px;
+    --sc-ease: cubic-bezier(.2, 0, 0, 1);
     --sc-divider: var(--b3-border-color);
 }
 
@@ -13,6 +15,7 @@
 .protyle-wysiwyg span[data-type~="u"][custom-comment-id] {
     border-bottom: none;
     color: inherit;
+    transition: background-color .15s ease, border-color .15s ease;
 }
 
 /* ---------- 讨论串卡片（面板与浮动卡片共用） ---------- */
@@ -59,6 +62,18 @@
     display: flex;
     gap: 8px;
     padding: 6px 12px;
+}
+
+/* 新发出或新收到的评论淡入 */
+.sc-comment--new {
+    animation: sc-fade-in .2s var(--sc-ease);
+}
+
+@keyframes sc-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
 }
 
 .sc-avatar {
@@ -131,18 +146,23 @@
     position: absolute;
     top: 4px;
     right: 10px;
-    display: none;
+    display: flex;
     padding: 2px;
     border-radius: 6px;
     background-color: var(--b3-theme-background);
     box-shadow: var(--sc-action-shadow);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .1s ease;
 }
 
 .sc-comment:hover .sc-comment__actions {
-    display: flex;
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .sc-action {
+    transition: background-color .1s ease, color .1s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -242,6 +262,11 @@
     background-color: var(--b3-theme-surface-lighter);
     color: var(--b3-theme-on-surface-light);
     pointer-events: none;
+    transition: background-color .15s ease, color .15s ease, transform .1s ease;
+}
+
+.sc-composer--ready .sc-send:active {
+    transform: scale(.92);
 }
 
 .sc-send svg {
@@ -285,16 +310,39 @@
 
 /* ---------- 浮动卡片 ---------- */
 
+/* 淡入淡出：显示时从锚点方向轻微位移并放大到原尺寸，时长与 popover.ts 的 FADE_DURATION 一致 */
 .sc-popover {
     position: fixed;
     width: 360px;
     max-width: calc(100vw - 16px);
     max-height: min(60vh, 520px);
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 4px 0;
     border-radius: 8px;
     background-color: var(--b3-theme-background);
     box-shadow: var(--sc-shadow);
+    opacity: 0;
+    transform: translateY(4px) scale(.98);
+    transform-origin: top left;
+    pointer-events: none;
+    transition: opacity .12s ease, transform .12s var(--sc-ease), visibility 0s;
+}
+
+.sc-popover[data-placement="above"] {
+    transform: translateY(-4px) scale(.98);
+    transform-origin: bottom left;
+}
+
+.sc-popover--visible,
+.sc-popover--visible[data-placement="above"] {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+}
+
+.sc-popover--offscreen {
+    visibility: hidden;
 }
 
 .sc-popover__sep {
@@ -314,6 +362,8 @@
 }
 
 .sc-badge {
+    transition: background-color .1s ease, color .1s ease;
+    animation: sc-fade-in .2s var(--sc-ease);
     position: absolute;
     display: inline-flex;
     align-items: center;
@@ -364,6 +414,7 @@
 }
 
 .sc-filter {
+    transition: background-color .1s ease;
     font-size: 12px;
     padding: 2px 8px;
     border-radius: 4px;
@@ -388,6 +439,7 @@
 .sc-list .sc-thread {
     border-bottom: 1px solid var(--sc-divider);
     padding: 6px 0;
+    transition: background-color .15s ease;
 }
 
 .sc-list .sc-thread--active {

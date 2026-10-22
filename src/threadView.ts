@@ -67,12 +67,21 @@ export class ThreadView {
     private readonly drafts = new Map<string, string>();
     private editingCommentId?: string;
     private readonly expanded = new Set<string>();
+    /** 已渲染过的讨论串和评论，用于给新出现的评论加淡入动画 */
+    private readonly seenThreads = new Set<string>();
+    private readonly seenComments = new Set<string>();
+    /** 每个容器上次渲染的 HTML，内容没变时跳过重绘，避免打断选中文字和悬停状态 */
+    private readonly lastHTML = new WeakMap<HTMLElement, string>();
 
     constructor(private readonly controller: CommentController) {
     }
 
     html(item: DocThread, options: { quote: boolean }) {
         const {thread} = item;
+        if (!this.seenThreads.has(thread.id)) {
+            this.seenThreads.add(thread.id);
+            thread.comments.forEach(comment => this.seenComments.add(comment.id));
+        }
         const resolved = thread.status === "resolved";
         let quote = "";
         if (options.quote) {
@@ -94,7 +103,7 @@ export class ThreadView {
             `<div class="sc-composer">
     ${avatar("user")}
     <textarea data-key="${replyKey}" rows="1" placeholder="${empty ? "添加评论…" : "回复…"}">${escapeHTML(this.drafts.get(replyKey) ?? "")}</textarea>
-    <span class="sc-send" data-action="send" aria-label="发送">${icon("iconScSend")}</span>
+    <span class="sc-send ariaLabel" data-position="north" data-action="send" aria-label="发送（回车）">${icon("iconScSend")}</span>
 </div>`;
 
         return `<div class="sc-thread${thread.id === this.controller.activeThreadId ? " sc-thread--active" : ""}${resolved ? " sc-thread--resolved" : ""}${empty ? " sc-thread--empty" : ""}" data-thread-id="${thread.id}">
@@ -111,8 +120,10 @@ export class ThreadView {
     <button class="b3-button b3-button--text" data-action="save-edit">保存</button>
 </div>` : `<div class="sc-comment__body b3-typography">${renderMarkdown(comment.content)}</div>`;
         const resolveAction = first && item.thread.status === "open" ?
-            `<span class="sc-action b3-tooltips b3-tooltips__sw" data-action="resolve" aria-label="解决">${icon("iconCheck")}</span>` : "";
-        return `<div class="sc-comment${editing ? " sc-comment--editing" : ""}" data-comment-id="${comment.id}">
+            `<span class="sc-action ariaLabel" data-position="north" data-action="resolve" aria-label="解决">${icon("iconCheck")}</span>` : "";
+        const fresh = !this.seenComments.has(comment.id);
+        this.seenComments.add(comment.id);
+        return `<div class="sc-comment${editing ? " sc-comment--editing" : ""}${fresh ? " sc-comment--new" : ""}" data-comment-id="${comment.id}">
     ${avatar(comment.author)}
     <div class="sc-comment__main">
         <div class="sc-comment__meta">
@@ -121,7 +132,7 @@ export class ThreadView {
         </div>
         ${body}
     </div>
-    ${editing ? "" : `<div class="sc-comment__actions">${resolveAction}<span class="sc-action" data-action="comment-menu">${icon("iconMore")}</span></div>`}
+    ${editing ? "" : `<div class="sc-comment__actions">${resolveAction}<span class="sc-action ariaLabel" data-position="north" data-action="comment-menu" data-menu="true" aria-label="更多">${icon("iconMore")}</span></div>`}
 </div>`;
     }
 
@@ -142,6 +153,10 @@ export class ThreadView {
 
     /** 重绘容器，保留其中输入框的焦点和光标位置，并完成公式渲染等收尾 */
     renderInto(root: HTMLElement, html: string) {
+        if (this.lastHTML.get(root) === html && root.childElementCount) {
+            return;
+        }
+        this.lastHTML.set(root, html);
         const focused = document.activeElement as HTMLTextAreaElement | null;
         const focusKey = focused && root.contains(focused) ? focused.dataset.key : undefined;
         const selection = focusKey ? [focused!.selectionStart, focused!.selectionEnd] : undefined;
@@ -218,8 +233,8 @@ export class ThreadView {
                 first ? "删除第一条评论会删除整个讨论串及其全部回复。" : "确定删除这条评论？",
                 () => void this.controller.deleteComment(item, comment.id)),
         });
-        const rect = (event.target as Element).getBoundingClientRect();
-        menu.open({x: rect.left, y: rect.bottom});
+        const rect = (event.target as Element).closest("[data-action]")!.getBoundingClientRect();
+        menu.open({x: rect.right, y: rect.bottom + 4, isLeft: true});
     }
 
     /** 在容器上绑定交互，返回解绑函数 */

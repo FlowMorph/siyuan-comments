@@ -9,8 +9,6 @@ interface Entry {
     protyle: IProtyle;
     layer: HTMLElement;
     frame: number;
-    /** 上次渲染的内容，没变化时不重建元素，避免打断鼠标悬停 */
-    html: string;
     dispose: () => void;
 }
 
@@ -29,7 +27,7 @@ export class BlockBadges {
         const layer = document.createElement("div");
         layer.className = "sc-badges";
         protyle.element.append(layer);
-        const entry: Entry = {protyle, layer, frame: 0, html: "", dispose: () => undefined};
+        const entry: Entry = {protyle, layer, frame: 0, dispose: () => undefined};
         const schedule = () => this.schedule(entry);
         const mutation = new MutationObserver(schedule);
         mutation.observe(protyle.wysiwyg.element, {childList: true, subtree: true, characterData: true});
@@ -74,31 +72,43 @@ export class BlockBadges {
         });
     }
 
+    /** 复用已有标记元素，只更新位置和内容；新出现的块才创建元素（淡入动画只播一次） */
     private render(entry: Entry) {
         const {protyle, layer} = entry;
         const groups = this.controller.openBlockThreads(protyle.block.rootID!);
         const host = protyle.element.getBoundingClientRect();
         const content = protyle.contentElement!.getBoundingClientRect();
-        const html: string[] = [];
+        const existing = new Map(Array.from(layer.querySelectorAll<HTMLElement>(".sc-badge"))
+            .map(badge => [badge.dataset.blockId!, badge]));
         groups.forEach((items, blockId) => {
             const block = findBlockElement(protyle.wysiwyg!.element, blockId);
-            if (!block?.offsetParent) {
+            const rect = block?.offsetParent ? block.getBoundingClientRect() : undefined;
+            if (!rect || rect.bottom < content.top || rect.top + 20 > content.bottom) {
                 return;
             }
-            const rect = block.getBoundingClientRect();
-            if (rect.bottom < content.top || rect.top + 20 > content.bottom) {
-                return;
+            let badge = existing.get(blockId);
+            existing.delete(blockId);
+            if (!badge) {
+                badge = document.createElement("div");
+                badge.className = "sc-badge";
+                badge.dataset.blockId = blockId;
+                layer.append(badge);
+            }
+            const threadIds = items.map(item => item.thread.id).join(",");
+            const count = items.reduce((sum, item) => sum + item.thread.comments.length, 0);
+            const html = `${icon("iconScComment")}${count ? `<span>${count}</span>` : ""}`;
+            if (badge.dataset.threadIds !== threadIds) {
+                badge.dataset.threadIds = threadIds;
+            }
+            if (badge.dataset.count !== String(count)) {
+                badge.dataset.count = String(count);
+                badge.innerHTML = html;
             }
             // 块右侧留白里，空间不够时贴着编辑区右边缘（避开滚动条）
-            const left = Math.min(rect.right + 6, content.right - 52) - host.left;
-            const count = items.reduce((sum, item) => sum + item.thread.comments.length, 0);
-            html.push(`<div class="sc-badge" data-block-id="${blockId}" data-thread-ids="${items.map(item => item.thread.id).join(",")}" style="top:${rect.top - host.top + 2}px;left:${left}px">${icon("iconScComment")}${count ? `<span>${count}</span>` : ""}</div>`);
+            badge.style.top = `${rect.top - host.top + 2}px`;
+            badge.style.left = `${Math.min(rect.right + 6, content.right - 52) - host.left}px`;
         });
-        const joined = html.join("");
-        if (joined !== entry.html) {
-            entry.html = joined;
-            layer.innerHTML = joined;
-        }
+        existing.forEach(badge => badge.remove());
     }
 
     destroy() {

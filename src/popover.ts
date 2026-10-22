@@ -7,6 +7,8 @@ import {ThreadView} from "./threadView";
 
 const SHOW_DELAY = 300;
 const HIDE_DELAY = 300;
+/** 与 index.css 中 .sc-popover 的过渡时长一致 */
+const FADE_DURATION = 120;
 const GAP = 6;
 const MARGIN = 8;
 
@@ -20,6 +22,7 @@ export class ThreadPopover {
     private showTimer = 0;
     private hideTimer = 0;
     private frame = 0;
+    private fadeTimer = 0;
     private readonly unbind: () => void;
     private readonly unsubscribe: () => void;
 
@@ -74,13 +77,23 @@ export class ThreadPopover {
         if (this.isOpen && !this.isShowing(threadIds)) {
             this.close();
         }
+        const wasOpen = this.isOpen;
         this.threadIds = threadIds;
         this.resolveAnchor = resolveAnchor;
         this.pinned = this.pinned || !!options.pin;
-        this.element.classList.remove("fn__none");
-        this.element.style.zIndex = String(++window.siyuan.zIndex);
+        if (!wasOpen) {
+            // 淡入：先以起始状态显示并定位，下一帧再加可见类触发过渡
+            window.clearTimeout(this.fadeTimer);
+            this.element.classList.remove("fn__none", "sc-popover--visible");
+            this.element.style.zIndex = String(++window.siyuan.zIndex);
+        }
         this.controller.select(threadIds[0]);
         this.refresh();
+        if (!wasOpen && this.isOpen) {
+            // 长讨论串默认滚到底部，露出最新回复和输入框
+            this.element.scrollTop = this.element.scrollHeight;
+            requestAnimationFrame(() => this.element.classList.add("sc-popover--visible"));
+        }
         if (options.focus) {
             // 等编辑器处理完选区后再抢焦点
             requestAnimationFrame(() => this.view.focusComposer(this.element, threadIds[0]));
@@ -93,8 +106,13 @@ export class ThreadPopover {
         const ids = this.threadIds;
         this.threadIds = [];
         this.pinned = false;
-        this.element.classList.add("fn__none");
-        this.element.innerHTML = "";
+        // 淡出结束后再隐藏和清空；期间重新打开会取消
+        this.element.classList.remove("sc-popover--visible");
+        window.clearTimeout(this.fadeTimer);
+        this.fadeTimer = window.setTimeout(() => {
+            this.element.classList.add("fn__none");
+            this.element.innerHTML = "";
+        }, FADE_DURATION);
         for (const id of ids) {
             const item = this.controller.findThread(id);
             if (item && item.thread.comments.length === 0) {
@@ -132,13 +150,20 @@ export class ThreadPopover {
         const rects = anchor.getClientRects();
         const first = rects[0] ?? anchor.getBoundingClientRect();
         const last = rects[rects.length - 1] ?? first;
+        // 锚点滚出编辑区可视范围时暂时隐藏卡片，滚回来再显示（不关闭，保留输入）
+        const viewport = anchor.closest(".protyle-content")?.getBoundingClientRect();
+        this.element.classList.toggle("sc-popover--offscreen",
+            !!viewport && (last.bottom < viewport.top || first.top > viewport.bottom));
         const width = this.element.offsetWidth;
         const height = this.element.offsetHeight;
         const left = Math.max(MARGIN, Math.min(first.left, window.innerWidth - width - MARGIN));
         let top = last.bottom + GAP;
+        let placement = "below";
         if (top + height > window.innerHeight - MARGIN && first.top - GAP - height >= MARGIN) {
             top = first.top - GAP - height;
+            placement = "above";
         }
+        this.element.dataset.placement = placement;
         this.element.style.left = `${left}px`;
         this.element.style.top = `${Math.max(MARGIN, top)}px`;
     }
@@ -204,6 +229,7 @@ export class ThreadPopover {
 
     destroy() {
         this.close();
+        window.clearTimeout(this.fadeTimer);
         this.unbind();
         this.unsubscribe();
         document.removeEventListener("mousedown", this.onDocumentMousedown, true);

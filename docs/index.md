@@ -30,3 +30,8 @@
 ## 开发
 
 `npm run build` 构建，`npm run watch` 监听；`npm run typecheck` 类型检查。改完在思源里重新加载插件（设置 → 集市 → 已下载，关闭再打开），或重启思源。
+
+## 思源前端的坑
+
+- 思源在 window 上的全局点击处理会关闭通用菜单，除非点击目标在菜单里或祖先带 `data-menu="true"`。插件 DOM 里点击后打开 `Menu` 的按钮必须带这个属性，否则菜单打开即被关闭（见 [[src/threadView.ts|ThreadView]] 的 ⋯ 按钮）。
+- 浮动卡片有滚动区域，`b3-tooltips` 的伪元素提示会被裁掉；卡片内按钮用 `ariaLabel` 类加 `aria-label`，由思源全局提示浮层显示。
