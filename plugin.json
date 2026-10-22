@@ -1,0 +1,20 @@
+{
+  "name": "siyuan-comments",
+  "author": "wangchen",
+  "url": "",
+  "version": "0.1.0",
+  "minAppVersion": "3.8.0",
+  "backends": ["all"],
+  "frontends": ["desktop", "desktop-window", "browser-desktop"],
+  "displayName": {
+    "default": "Comments",
+    "zh_CN": "评论"
+  },
+  "description": {
+    "default": "Threaded comments on text, blocks and documents, shown in a sidebar dock.",
+    "zh_CN": "在文字、块和文档上开评论串，可回复、可标记解决，显示在侧栏面板。"
+  },
+  "readme": {
+    "default": "README.md"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "siyuan-comments",
+  "version": "0.1.0",
+  "private": true,
+  "description": "思源笔记评论串插件",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "siyuan": "^1.2.9",
+    "typescript": "^5.9.0"
+  }
+}
