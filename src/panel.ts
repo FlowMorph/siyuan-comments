@@ -1,7 +1,7 @@
 // 侧栏评论面板：对应 Notion 的评论面板，列出当前文档的讨论串（带原文引用），按状态筛选；
 // 卡片的渲染和交互由 ThreadView 负责，与正文浮动卡片共用。
 import {CommentController} from "./controller";
-import {escapeHTML, icon, ThreadView} from "./threadView";
+import {icon, ThreadView} from "./threadView";
 import {DocThread} from "./types";
 
 type Filter = "open" | "resolved" | "all";
@@ -62,8 +62,7 @@ export class CommentPanel {
 
         const count = (filter: Filter) => filter === "all" ? controller.threads.length :
             controller.threads.filter(item => item.thread.status === filter).length;
-        this.toolbar.innerHTML = controller.currentRootId ? `<div class="sc-doc-title">${escapeHTML(controller.title)}</div>
-<div class="sc-filters">${(Object.keys(FILTER_LABELS) as Filter[]).map(key =>
+        this.toolbar.innerHTML = controller.currentRootId ? `<div class="sc-filters">${(Object.keys(FILTER_LABELS) as Filter[]).map(key =>
             `<span data-action="filter" data-filter="${key}" class="sc-filter${key === this.filter ? " sc-filter--active" : ""}">${FILTER_LABELS[key]} ${count(key)}</span>`).join("")}</div>` : "";
 
         const threads = this.visibleThreads();

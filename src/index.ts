@@ -23,6 +23,12 @@ export default class CommentsPlugin extends Plugin {
         this.addIcons(`<symbol id="iconScComment" viewBox="0 0 32 32">
 <path d="M6 4h20a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H14l-7 5.5V24H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3zm3 6v2.5h14V10H9zm0 5.5V18h10v-2.5H9z"></path>
 </symbol>
+<symbol id="iconScUser" viewBox="0 0 32 32">
+<path d="M16 4.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 27.5c0-5.2 4.9-8.5 11-8.5s11 3.3 11 8.5V29H5z"></path>
+</symbol>
+<symbol id="iconScAI" viewBox="0 0 32 32">
+<path d="M14 3c.7 5.8 4.2 9.3 10 10-5.8.7-9.3 4.2-10 10-.7-5.8-4.2-9.3-10-10 5.8-.7 9.3-4.2 10-10zM24.5 18c.4 3.1 2.4 5.1 5.5 5.5-3.1.4-5.1 2.4-5.5 5.5-.4-3.1-2.4-5.1-5.5-5.5 3.1-.4 5.1-2.4 5.5-5.5z"></path>
+</symbol>
 <symbol id="iconScSend" viewBox="0 0 32 32">
 <path d="M16 5l9.5 9.5-2.1 2.1-5.9-5.9V27h-3V10.7l-5.9 5.9-2.1-2.1z"></path>
 </symbol>`);

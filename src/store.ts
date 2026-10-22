@@ -82,8 +82,3 @@ export async function loadDocThreads(rootId: string): Promise<DocThread[]> {
     result.sort((a, b) => a.blockIndex - b.blockIndex || a.thread.created.localeCompare(b.thread.created));
     return result;
 }
-
-export async function getDocTitle(rootId: string): Promise<string> {
-    const rows = await sql<{ content: string }>(`SELECT content FROM blocks WHERE id = '${rootId}' LIMIT 1`);
-    return rows[0]?.content ?? "";
-}

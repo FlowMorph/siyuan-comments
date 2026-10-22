@@ -4,13 +4,12 @@ import {getAllEditor, IProtyle, showMessage} from "siyuan";
 import {getBlocksIndexes} from "./api";
 import {deleteInlineThread, scrollToAnchor, wrapSelection} from "./anchor";
 import {Highlighter} from "./highlight";
-import {addComment, getDocTitle, loadDocThreads, mutateThreads, newId, now, updateThread} from "./store";
+import {addComment, loadDocThreads, mutateThreads, newId, now, updateThread} from "./store";
 import {ATTR_ANCHOR, ATTR_THREADS, AnchorKind, DocThread, Thread, ThreadStatus} from "./types";
 
 export class CommentController {
     /** rootId → 该文档的讨论串，覆盖所有打开过的文档，用于正文高亮 */
     private readonly cache = new Map<string, DocThread[]>();
-    private readonly titles = new Map<string, string>();
     private readonly listeners = new Set<() => void>();
     private readonly highlighter = new Highlighter();
     private readonly reloadTimers = new Map<string, number>();
@@ -38,10 +37,6 @@ export class CommentController {
         return this.currentRootId ? this.cache.get(this.currentRootId) ?? [] : [];
     }
 
-    get title(): string {
-        return this.currentRootId ? this.titles.get(this.currentRootId) ?? "" : "";
-    }
-
     private fail(error: unknown) {
         console.error("[siyuan-comments]", error);
         showMessage(`评论：${(error as Error).message}`, 6000, "error");
@@ -49,9 +44,7 @@ export class CommentController {
 
     async load(rootId: string) {
         try {
-            const [threads, title] = await Promise.all([loadDocThreads(rootId), getDocTitle(rootId)]);
-            this.cache.set(rootId, threads);
-            this.titles.set(rootId, title);
+            this.cache.set(rootId, await loadDocThreads(rootId));
             this.emit();
         } catch (e) {
             this.fail(e);

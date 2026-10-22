@@ -52,7 +52,7 @@ function fullTime(iso: string) {
 }
 
 function avatar(author: Comment["author"]) {
-    return `<span class="sc-avatar sc-avatar--${author}">${author === "ai" ? "AI" : "我"}</span>`;
+    return `<span class="sc-avatar sc-avatar--${author}">${icon(author === "ai" ? "iconScAI" : "iconScUser")}</span>`;
 }
 
 export interface BindOptions {
