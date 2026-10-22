@@ -35,3 +35,4 @@
 
 - 思源在 window 上的全局点击处理会关闭通用菜单，除非点击目标在菜单里或祖先带 `data-menu="true"`。插件 DOM 里点击后打开 `Menu` 的按钮必须带这个属性，否则菜单打开即被关闭。
 - 浮动卡片有滚动区域，`b3-tooltips` 的伪元素提示会被裁掉；卡片内按钮用 `ariaLabel` 类加 `aria-label`，由思源全局提示浮层显示。
+- 不要在点击处理中同步重绘被点元素所在的 DOM：思源全局点击处理在 window 上运行，拿 `event.target` 向上找祖先判断是否点在浮动侧栏（`layout--float`）内，目标已被替换脱离文档时会判为点在外面并收起侧栏。插件所有重绘都经 [[src/controller.ts|CommentController]] 的 `emit` 推迟到下一帧。

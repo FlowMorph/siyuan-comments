@@ -214,9 +214,12 @@ export class ThreadView {
         this.editingCommentId = comment.id;
         this.drafts.delete(`edit:${comment.id}`);
         this.controller.emit();
-        const textarea = root.querySelector<HTMLTextAreaElement>(`textarea[data-key="edit:${comment.id}"]`);
-        textarea?.focus();
-        textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
+        // emit 在下一帧重绘，之后再聚焦编辑框
+        requestAnimationFrame(() => {
+            const textarea = root.querySelector<HTMLTextAreaElement>(`textarea[data-key="edit:${comment.id}"]`);
+            textarea?.focus();
+            textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
+        });
     }
 
     private stopEdit(item: DocThread, comment: Comment, save: boolean) {

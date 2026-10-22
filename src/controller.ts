@@ -27,10 +27,22 @@ export class CommentController {
         return () => this.listeners.delete(listener);
     }
 
-    /** 状态或视图状态（展开、编辑中）变化后通知面板、浮动卡片和高亮重绘 */
+    private emitFrame = 0;
+
+    /**
+     * 状态或视图状态（展开、编辑中）变化后通知面板、浮动卡片和高亮重绘。
+     * 推迟到下一帧并合并：若在点击处理中同步重绘，被点的按钮会在事件冒泡到 window 前被替换掉，
+     * 思源的全局点击处理拿脱离文档的元素判断「是否点在浮动侧栏内」会判错，把侧栏收起。
+     */
     emit() {
-        this.highlighter.update(Array.from(this.cache.values()).flat(), this.activeThreadId);
-        this.listeners.forEach(listener => listener());
+        if (this.emitFrame) {
+            return;
+        }
+        this.emitFrame = requestAnimationFrame(() => {
+            this.emitFrame = 0;
+            this.highlighter.update(Array.from(this.cache.values()).flat(), this.activeThreadId);
+            this.listeners.forEach(listener => listener());
+        });
     }
 
     get threads(): DocThread[] {
@@ -257,6 +269,7 @@ export class CommentController {
     }
 
     destroy() {
+        cancelAnimationFrame(this.emitFrame);
         this.reloadTimers.forEach(timer => window.clearTimeout(timer));
         this.highlighter.destroy();
         this.listeners.clear();

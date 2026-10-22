@@ -104,8 +104,9 @@ export class CommentPanel {
                 }
                 break;
             case "filter":
+                // 经 emit 推迟到下一帧重绘，原因见 CommentController.emit
                 this.filter = actionElement.dataset.filter as Filter;
-                this.render();
+                controller.emit();
                 break;
         }
     };
