@@ -5,9 +5,10 @@
     --sc-anchor-border: rgba(230, 160, 0, .75);
 }
 
-/* 锚点复用原生下划线，插件启用时隐藏下划线，改由高亮规则显示 */
+/* 锚点复用原生下划线（思源用 border-bottom 画），插件启用时隐藏，改由高亮规则显示 */
 .protyle-wysiwyg span[data-type~="u"][custom-comment-id] {
-    text-decoration: none;
+    border-bottom: none;
+    color: inherit;
 }
 
 .sc-panel {

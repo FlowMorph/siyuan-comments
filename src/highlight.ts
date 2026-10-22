@@ -2,6 +2,9 @@
 // 未知或已解决的锚点只去掉下划线；未解决的显示为淡黄高亮；当前选中的讨论串加深。
 import {ATTR_ANCHOR, DocThread} from "./types";
 
+/** 与 index.css 隐藏下划线的基础规则同样的选择器前缀，再加 id 条件后优先级更高 */
+const ANCHOR_BASE = `.protyle-wysiwyg span[data-type~="u"][${ATTR_ANCHOR}]`;
+
 export class Highlighter {
     private readonly style: HTMLStyleElement;
 
@@ -19,7 +22,7 @@ export class Highlighter {
                 continue;
             }
             if (thread.anchor === "inline") {
-                openInline.push(`.protyle-wysiwyg span[${ATTR_ANCHOR}="${thread.id}"]`);
+                openInline.push(`${ANCHOR_BASE}[${ATTR_ANCHOR}="${thread.id}"]`);
             } else if (thread.anchor === "block") {
                 openBlocks.add(`.protyle-wysiwyg [data-node-id="${blockId}"]`);
             }
@@ -38,7 +41,7 @@ export class Highlighter {
 }`);
         }
         if (activeId) {
-            rules.push(`.protyle-wysiwyg span[${ATTR_ANCHOR}="${activeId}"] {
+            rules.push(`${ANCHOR_BASE}[${ATTR_ANCHOR}="${activeId}"] {
     background-color: var(--sc-anchor-bg-active);
 }`);
         }
