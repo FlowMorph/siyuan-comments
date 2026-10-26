@@ -189,6 +189,9 @@ export default class CommentsPlugin extends Plugin {
         const anchor = this.anchorAt(event.target);
         if (anchor) {
             this.popover.hover(anchor.threadIds, anchor.resolver);
+            if (anchor.element.classList.contains("sc-badge")) {
+                this.controller.setHoverThreads(anchor.threadIds);
+            }
         }
     };
 
@@ -196,6 +199,7 @@ export default class CommentsPlugin extends Plugin {
         const anchor = this.anchorAt(event.target);
         if (anchor && !(event.relatedTarget instanceof Node && anchor.element.contains(event.relatedTarget))) {
             this.popover.leave();
+            this.controller.setHoverThreads([]);
         }
     };
 

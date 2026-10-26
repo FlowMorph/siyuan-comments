@@ -91,6 +91,11 @@ export class CommentController {
         }
     }
 
+    /** 悬停块右侧评论标记时加深其中划词评论的高亮，传空数组取消 */
+    setHoverThreads(threadIds: string[]) {
+        this.highlighter.setHover(threadIds);
+    }
+
     isCached(rootId: string) {
         return this.cache.has(rootId);
     }
