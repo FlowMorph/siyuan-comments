@@ -1,6 +1,6 @@
 {
   "name": "siyuan-comments",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "思源笔记评论串插件",
   "scripts": {

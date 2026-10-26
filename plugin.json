@@ -2,8 +2,8 @@
   "name": "siyuan-comments",
   "author": "FlowMorph",
   "url": "https://github.com/FlowMorph/siyuan-comments",
-  "version": "0.1.0",
-  "minAppVersion": "3.8.0",
+  "version": "0.1.1",
+  "minAppVersion": "3.8.7",
   "backends": [
     "all"
   ],
