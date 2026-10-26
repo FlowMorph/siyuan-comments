@@ -106,11 +106,17 @@ export class CommentController {
         return undefined;
     }
 
-    /** 某个文档里挂在指定块上的未解决块评论 */
+    /**
+     * 某个文档里需要在块右侧显示标记的未解决讨论串，按所在块分组：块评论，以及原文仍在、已有评论的划词评论
+     * （跨段落的划词评论归在第一个块上；还没写第一条评论的划词草稿卡片挂在高亮文字上，不显示标记）
+     */
     openBlockThreads(rootId: string): Map<string, DocThread[]> {
         const result = new Map<string, DocThread[]>();
         for (const item of this.cache.get(rootId) ?? []) {
-            if (item.thread.anchor === "block" && item.thread.status === "open") {
+            const {thread} = item;
+            const marked = thread.anchor === "block" ||
+                (thread.anchor === "inline" && !item.anchorLost && thread.comments.length > 0);
+            if (marked && thread.status === "open") {
                 result.set(item.blockId, [...(result.get(item.blockId) ?? []), item]);
             }
         }

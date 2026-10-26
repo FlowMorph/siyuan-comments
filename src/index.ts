@@ -124,7 +124,7 @@ export default class CommentsPlugin extends Plugin {
         return () => findAnchorSpans(threadId, root);
     }
 
-    /** 块评论卡片挂在块右侧的标记上；标记尚未渲染时挂在块上 */
+    /** 从块右侧标记打开的卡片挂在标记上；标记尚未渲染时挂在块上 */
     private blockResolver(blockId: string, root?: Element | null): AnchorResolver {
         return () => {
             const element = this.badges.findBadge(blockId) ?? (root ? findBlockElement(root, blockId) : null);
@@ -155,7 +155,7 @@ export default class CommentsPlugin extends Plugin {
         return !!protyle.model;
     }
 
-    /** 鼠标下的评论锚点：未解决的划词高亮，或块评论标记 */
+    /** 鼠标下的评论锚点：未解决的划词高亮，或块右侧的评论标记 */
     private anchorAt(target: EventTarget | null): { element: Element, threadIds: string[], resolver: AnchorResolver } | undefined {
         if (!(target instanceof Element)) {
             return undefined;

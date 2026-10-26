@@ -1,4 +1,4 @@
-// 块评论标记：对应 Notion 块右侧的「💬 数量」图标。
+// 评论标记：对应 Notion 块右侧的「💬 数量」图标。块评论和划词评论都在所在块右侧显示，同一块上的合并为一个标记，数量为评论总条数。
 // 标记画在编辑器（.protyle）里的一个覆盖层上，不改动编辑器 DOM；块位置变化（滚动、编辑、尺寸变化）时重新定位。
 import {IProtyle} from "siyuan";
 import {findBlockElement} from "./anchor";
