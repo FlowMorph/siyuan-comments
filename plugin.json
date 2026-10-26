@@ -14,13 +14,22 @@
   ],
   "displayName": {
     "default": "Comments",
-    "zh_CN": "评论"
+    "zh-CN": "评论"
   },
   "description": {
     "default": "Threaded comments on text, blocks and documents, shown in a sidebar dock.",
-    "zh_CN": "在文字、块和文档上开评论串，可回复、可标记解决，显示在侧栏面板。"
+    "zh-CN": "在文字、块和文档上开评论串，可回复、可标记解决，显示在侧栏面板。"
   },
   "readme": {
-    "default": "README.md"
-  }
+    "default": "README_en.md",
+    "zh-CN": "README.md"
+  },
+  "keywords": [
+    "评论",
+    "批注",
+    "讨论",
+    "comment",
+    "annotation",
+    "Notion"
+  ]
 }

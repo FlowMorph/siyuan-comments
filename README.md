@@ -13,7 +13,7 @@
 
 ## 和 AI 协作
 
-[tools/siyuan_comments.py](tools/siyuan_comments.py) 是给 AI 代理（例如 Claude Code）用的命令行工具：列出未解决的讨论串、查看原文和整篇文档上下文、以 AI 身份回复、标记解决。写入后插件面板实时刷新。工具通过本机思源内核 API（127.0.0.1:6806）工作，token 从当前工作空间的 `conf/conf.json` 读取。
+[tools/siyuan_comments.py](https://github.com/FlowMorph/siyuan-comments/blob/main/tools/siyuan_comments.py)（在源码仓库里，不随插件包分发）是给 AI 代理（例如 Claude Code）用的命令行工具：列出未解决的讨论串、查看原文和整篇文档上下文、以 AI 身份回复、标记解决。写入后插件面板实时刷新。工具通过本机思源内核 API（127.0.0.1:6806）工作，token 从当前工作空间的 `conf/conf.json` 读取。
 
 ```bash
 python3 tools/siyuan_comments.py list            # 列出全部未解决讨论串
@@ -23,7 +23,7 @@ echo "回复内容" | python3 tools/siyuan_comments.py reply <id> -
 
 ## 开发
 
-需要 Node.js。`npm install` 后 `npm run build` 生成 `dist/`，把 `dist/` 软链或复制到工作空间的 `data/plugins/siyuan-comments`，在思源 设置 → 集市 → 已下载 中启用。项目结构见 [docs/index.md](docs/index.md)。
+需要 Node.js。`npm install` 后 `npm run build` 生成 `dist/`，把 `dist/` 软链或复制到工作空间的 `data/plugins/siyuan-comments`，在思源 设置 → 集市 → 已下载 中启用。`npm run package` 构建并生成集市发布用的 `package.zip`。项目结构见 [docs/index.md](https://github.com/FlowMorph/siyuan-comments/blob/main/docs/index.md)。
 
 ## 数据
 

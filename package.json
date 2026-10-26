@@ -5,6 +5,7 @@
   "description": "思源笔记评论串插件",
   "scripts": {
     "build": "node build.mjs",
+    "package": "node build.mjs && rm -f package.zip && cd dist && zip -qr ../package.zip .",
     "watch": "node build.mjs --watch",
     "typecheck": "tsc --noEmit"
   },

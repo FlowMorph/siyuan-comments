@@ -29,7 +29,9 @@
 
 ## 开发
 
-`npm run build` 构建，`npm run watch` 监听；`npm run typecheck` 类型检查。改完在思源里重新加载插件（设置 → 集市 → 已下载，关闭再打开），或重启思源。
+`npm run build` 构建，`npm run watch` 监听；`npm run typecheck` 类型检查；`npm run package` 构建并把 `dist/` 打成 `package.zip`。
+
+发布到思源集市：`plugin.json` 的 `version` 加一，`npm run package`，在 GitHub 建同版本号的 Release 并上传 `package.zip`，集市索引会自动拉取（首次上架已向 `siyuan-note/bazaar` 的 `plugins.txt` 提交 PR）。集市详情页的说明默认用英文 [[README_en.md|README_en]]，中文用 [[README.md|README]]，两份同步维护。改完在思源里重新加载插件（设置 → 集市 → 已下载，关闭再打开），或重启思源。
 
 ## 思源前端的坑
 
